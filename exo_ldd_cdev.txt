@@ -1,0 +1,277 @@
+...........................................................
+. Linux Device Driver
+. EnsiCaen training
+
+16/10/2019
+Stephen O'DONNELL
+...........................................................
+
+...........................................................
+. Part#1: Linux Device Driver compilation
+...........................................................
+
+1.0) get linux_training from foad or usb stick
+
+1.1) create a folder ~/ldd_training and work on it
+
+1.2) write a module source in file mytuxit.c with :
+   - license type "GPL"
+   - Author's name:"www.ensicaen.com"
+   - init method that logs compilation date and time (Help#1)
+   - exit method
+
+1.3) check where are the kernel source header files (Help#2) >//lib/modules/4.15.0-54-generic/build/include/linux
+
+    If header files are not present, get it with the installation tool (Help#22)
+
+1.4) create your Makefile using the template
+   - what does obj-m and xxx-objs mean ?
+
+obj-m means it is a kernel module to create. Generate "*.o" file
+xxx-objs in our case EnsiCaen_ldd-objs adds all the dependencies for the drivers "*.c" files
+   - where is the build input used to compile the module ?>lib/modules/4.15.0-54-generic/build
+
+1.5) compile the module (Help#3)
+   - what file are generated ? several files are generated such as the '*.o' and '*.ko' files that we asked for in our Makefile.
+   - what is EnsiCaen_ldd.mod.c ? It's a file that contains the info about the module required at the time of inserting, such as the version number or symbols.
+   If kernel source are not available or not all installed, update it (Help#19)
+
+1.6) clean compliation (Help#4)
+   - what has been removed ? all the file previously created are taken away.
+
+...........................................................
+. Part#2: Linux Device Driver installation
+...........................................................
+
+2.1) manual installation: (Help#5)
+   - install the module (if you get error: required key not available, check Help#18) 	>sudo insmod EnsiCaen_ldd.ko --> puts it in the kernel!
+   - list all installed modules
+   - use the lsmod command and compare > lsmod --> should be the first module on top on the list
+   - pipe the lsmod to see only the module
+   - remove the module >sudo rmmod EnsiCaen_ldd
+
+   - check the module is not more there --> It is in fact no ther anymor
+
+2.2) display system logs (Help#6)
+   - how long was the module alive in the system ? It was alive for around 9 minutes (see bellow)
+
+[jeu. oct. 10 09:37:44 2019] EnsiCaen_ldd: loading out-of-tree module taints kernel.
+[jeu. oct. 10 09:37:44 2019] mytuxit init: Oct 10 2019 09:37:19
+[jeu. oct. 10 09:39:29 2019] mytuxit exit
+[jeu. oct. 10 09:43:15 2019] mytuxit init: Oct 10 2019 09:37:19
+[jeu. oct. 10 09:46:24 2019] mytuxit exit
+
+
+
+2.3) parameters usage (Help#7)
+     add the param 'verbose' of type 'int' to the module so that
+     it is silent when verbose is not used or set to '0'
+     (printk are not displayed)
+
+added a condition to the insmod cmdline >sudo insmod EnsiCaen_ldd.ko verbose =1
+enable the printk
+
+2.4) Dump info about the module (Help#71)
+
+...........................................................
+. Part#3: allocate character device region
+...........................................................
+
+3.1) update the source to support inode:
+   - register the module EnsiCaen_ldd to a inode in the init methode (Help#8)
+   - do forget to unregister when leaving (Help#9)
+   - print the major and minor during the init (Help#10)
+
+3.2) check the inode
+   - compile the module
+   - install the module
+   - check the inode number in /proc/devices
+   - what are the major and minor number ? > (243,0)
+   - compare with system log > dmesg
+
+3.3) connection to the file system
+   - bind the file system to the inode (Help#11)
+   - ensure device file is readable by all (Help#12)
+   - remove it (Help#13)
+
+3.4) Simplify the verification process using 2 scripts:
+   ./install.sh for module insertion
+   ./clean.sh for module removal
+
+...........................................................
+. Part#4: character device interface
+...........................................................
+
+4.1) create a file operation structure containing open, release and read methods (Help#14)
+
+4.2) initialise a struct cdev mycdev with this file operation structure (Help#15)
+   - what's happen if the cdev_add return value is not check ?
+   - and why is the cdev_del method call ?
+   - use it also in the exit method ?
+   - which one shall be called first before leaving: cdev_del(&char_dev); or unregister_chrdev_region(dev_num, 1);
+
+<---- goal#1 - mercredi ---->
+   
+4.3) Implement a read method of the cdev that returns a constant string 'read method call' to userland
+     check if it's working with the command
+     cat /dev/EnsiCaenDevice
+     Be carreful to the return value of the read method, it shall be stricly the number of bytes read
+	
+4.4) what's happen if device number is wrong in cdev_add ?
+     Read chapter 3 of LDD book ;)
+
+   
+...........................................................
+. Part#5: application from console and userland
+...........................................................
+
+5.1) Write a test application that uses the EnsiCaenDevice.
+     The test application is written in file test.c
+     It shall call the open, read and close API from userland and display the data returned by the read method.
+
+5.2) Improve the Makefile with the following traget:
+appli:
+	gcc test.c -o test
+
+     how to get help for include in the application with open method :
+     >man -k open
+     >man 2 open
+
+5.3) Implement a write method in the driver that copy the userland input in a driver local buffer.
+     Update the the read method so that the local buffer is returned to user land (and no more the constant string).
+	
+5.4) Use simple sleep implementation (chapter 6 of ldd book, page 150) to block read until the first write has been done.
+     For test purpose, use the test application and command line (prompt) in parallel.
+     The test application is blocked by the read and unblocked while prompting this:
+     echo "something" > /dev/EnsiCaenDevice
+
+5.5) use a IOCTL command (chapter 3 & 6 of ldd book) that turn the read block on or off on request from the application.
+     Usage : ioctl(fd, ENSICAEN_READ_BLOCKING, activation);
+     where activation = 0 => read is not blocked and will return an empty string
+          activation = 1 => read is blocked until the first write
+     (Help#16)
+     The application is using the IOCTL like this : (Help#17)
+
+5.6) Check the application ./test works and provide:
+   - source of driver + test application 
+   - copy of shell commands with expected answers
+
+<---- goal#2 ---->
+	
+5.7) Improve the driver to allows 2 parallels access to the driver:
+    Use the file structure parameter of cdev (in open, read, write, close method) and namely the private_data element
+    Then instantiate dynamically 2 internal buffers in the driver using the kmalloc API (chapter 3 of ldd book)
+    /!\ the sleep implementation is no more needed here
+
+5.8) Modify the test application so that is will manage 2 sessions with the driver (2 handles)
+    Verify and provide:
+    - source of driver + test application
+    - copy of shell commands with expected answers
+	
+5.9) ok if you are there you have done very good progress in char device driver on Linux ;)
+	
+	
+Command tips:
+
+(Help#1) printk(KERN_INFO "mytuxit init: %s %s\n",__DATE__, __TIME__);
+(Help#2) ls /lib/modules/.../build
+(Help#21) sudo pacman -S linux-headers / sudo apt-get install linux-headers
+(Help#3) make
+(Help#4) make clean
+(Help#5) :
+ sudo insmod the_module.ko
+ sudo rmmod the_module
+ cat /proc/modules
+(Help#6) dmesg (same as tail /var/log/syslog)
+(Help#7) :
+ static int param_verbose=0;
+ module_param_named(verbose,param_verbose,int,S_IRUGO);
+ MODULE_PARM_DESC(verbose, "0: silent, 1: verbose");
+(Help#71) :
+modinfo
+(Help#8)
+#include <linux/cdev.h>  
+#include <linux/fs.h>
+ dev_t dev_num;
+ err = alloc_chrdev_region(&dev_num, 0, 1, "EnsiCaen_ldd");
+ if (err) return err;
+(Help#9) unregister_chrdev_region(dev_num, 1);
+(Help#10) printk(KERN_INFO "mytuxit init: (%d,%d)\n",MAJOR(dev_num), MINOR(dev_num));
+(Help#11) sudo mknod /dev/EnsiCaen_Device c major_number minor_number
+(Help#12) sudo chmod 644 /dev/EnsiCaen_Ldd
+(Help#13) sudo rm -f /dev/EnsiCaen_Device
+(Help#14)
+ int cdev_open(struct inode *pInode, struct file *pFile) {;}
+ int cdev_release/close(struct inode *pInode, struct file *pFile) {;}
+ ssize_t cdev_read(struct file *fp, char __user *buffer, size_t len, loff_t *offset) {;}
+ struct file_operations cdev_fops = {
+   owner:    THIS_MODULE,
+   open:     cdev_open,
+   release:  cdev_release,
+   close:    cdev_close,
+   read:     cdev_read
+   // unlocked_ioctl: cdev_ioctl,
+ };
+(Help#15)
+ cdev_init(&char_dev, &cdev_fops);
+ char_dev.owner = THIS_MODULE;
+ err = cdev_add(&char_dev, dev_num, 1);
+ if (err){
+   unregister_chrdev_region(dev_num, 1);
+ }   
+(Help#16)
+long cdev_ioctl (struct file *fp, unsigned int cmd, unsigned long arg)
+{
+
+	int activ = 0;
+	int err = 0;
+
+	printk(KERN_INFO "mytuxit:%s\n",__func__);
+
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+	else if (_IOC_DIR(cmd) & _IOC_WRITE)
+		err = !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+	if (err) return -EFAULT;
+
+	switch (_IOC_NR(cmd))
+	{
+	        case 1:
+		{
+			printk(KERN_INFO "mytuxit:%s: NXP_READ_BLOCKING\n",__func__);
+			if (copy_from_user(&activ,(void __user *)arg,sizeof(int)))
+			{
+				printk(KERN_INFO "mytuxit:%s: NXP_READ_BLOCKING: error on copy_from_user\n",__func__);
+				return -EACCES;
+			}
+			printk(KERN_INFO "mytuxit:%s: NXP_READ_BLOCKING: activation=%d\n",__func__,(int)activ);
+			if (activ == 0)
+				read_activation = 0;
+			else
+				read_activation = 1;
+			break;
+		}
+
+		default:
+		{
+			/* unrecognized ioctl */	
+			printk(KERN_INFO "mytuxit:%s:unknown ioctl number: 0x%x/0x%x\n",__func__,cmd,_IOC_NR(cmd));
+			return -ENOIOCTLCMD;
+		}
+	}
+	return 0;
+}
+
+(Help#17)
+/* Use 'k' as magic number */
+#define NXP_IOCTL_READ_BLOCKING _IOW('k', 1, unsigned long *)
+err = ioctl((int)fp, NXP_IOCTL_READ_BLOCKING, &activation);
+
+(Help#18)
+ERROR: could not insert module EnsiCaen_ldd.ko: Required key not available
+sudo apt install mokutil
+sudo mokutil --disable-validation (new password required at prompt)
+After reboot, you are request to update the boot mode (secure boot prompt), then provide password.
+
+(Help#19)
+sudo apt-get install linux-generic

@@ -1,0 +1,25 @@
+#include <...>
+
+int main()
+{
+  char buffer[BUFFER_SIZE];
+  int len;
+  int activation = 0;
+
+  int fd = open("/dev/EnsiCaen_device", O_RDWR);
+  if (fd == -1) {
+    perror("open error");
+    return -1;
+  }
+
+  // question 5.5 and after only
+  //ioctl(fd, ENSICAEN_READ_BLOCKING, activation);
+
+  len = read(fd, buffer, BUFFER_SIZE);
+  if (len == -1) {
+    perror("read error");
+    return -1;
+  }
+
+
+}
