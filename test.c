@@ -24,9 +24,6 @@ int main()
     return -1;
   }
 
-  // question 5.5 and after only
-  /*printf(" Enter a string to send\n");
-  scanf("%s",buffer);*/
   ioctl(fd, ENSICAEN_READ_BLOCKING, (const char*)&activation);
   int err = ioctl((int)fd, ENSICAEN_READ_BLOCKING, (const char*)&activation);
   len = read(fd, buffer, BUFFER_SIZE);
@@ -37,6 +34,6 @@ int main()
     perror("read error");
     return -1;
   }
-	
+	return 0;	
 
 }

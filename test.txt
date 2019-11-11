@@ -1,0 +1,66 @@
+Process of our Linux device driver
+
+
+First terminal: ttyO
+
+First of all what we had to do is loading the driver on the kernel: 
+--> To do so we used the Shell script created called "install.sh"
+
+( shell command )
+>$ ./install.sh
+>$ lsmod # used to check that the driver is loaded
+
+ 
+( shell command )
+>$ dmesg -T
+
+dmesg output:
+[lun. nov. 11 14:44:36 2019] mytuxit init: Nov 11 2019 14:44:27
+[lun. nov. 11 14:44:36 2019] mytuxit init: (243,0)
+
+[lun. nov. 11 14:46:50 2019] open()
+[lun. nov. 11 14:46:50 2019] mytuxit:cdev_ioctl
+[lun. nov. 11 14:46:50 2019] mytuxit:cdev_ioctl: ENSICAEN_READ_BLOCKING
+[lun. nov. 11 14:46:50 2019] mytuxit:cdev_ioctl: ENSICAEN_READ_BLOCKING: activation=1
+[lun. nov. 11 14:46:50 2019] mytuxit:cdev_ioctl
+[lun. nov. 11 14:46:50 2019] mytuxit:cdev_ioctl: ENSICAEN_READ_BLOCKING
+[lun. nov. 11 14:46:50 2019] mytuxit:cdev_ioctl: ENSICAEN_READ_BLOCKING: activation=1
+[lun. nov. 11 14:46:50 2019] read: wait for someone to write
+
+
+We can here see that the Reading function is not available, It is blocked. 
+The driver is waiting for someone to write on the driver to make the reading function available.
+We can't read since a semaphore was implemented and is a the state of 'down()'. Only the write function can change the semaphores state to 'up()'.
+
+To solve this issue we  had to write something on the driver:
+
+( shell command )
+>$ echo " I am unblocking the read function " > /dev/EnsiCaen_Device
+
+( shell command )
+>$ dmesg -T
+
+dmesg output: 
+[lun. nov. 11 14:48:00 2019] open()
+[lun. nov. 11 14:48:00 2019] write()
+[lun. nov. 11 14:48:00 2019] write:  writing of 36 / 36 char >  I am unblocking the read function 
+
+[lun. nov. 11 14:48:00 2019] write: enabling reading function
+[lun. nov. 11 14:48:00 2019] read: demande lecture de 64 octets
+[lun. nov. 11 14:48:00 2019] read: 64 octets reellement lus
+
+
+Once we wrote on the driver, the read function was then available.
+We can easily see each step of the process: Open, write, enable reading ( meaning the semaphore is now 'up()' ) and finally read.
+
+other terminal: tty1
+
+I launch the 'test.c' program
+
+>$ ./test
+
+tty1 output:
+
+length : 64
+buffer : I am unblocking the read function
+
